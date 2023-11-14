@@ -1,0 +1,9 @@
+view: hr {
+  view_label: "HR"
+  derived_table: {
+    sql:
+      SELECT 'Joan of Arc' as "name", 'Executive' as department, 2008 as hired_year from app_bi.app_bi.a1
+    ;;
+  }
+  }
+}
