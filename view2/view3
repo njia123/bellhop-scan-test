@@ -1,8 +1,83 @@
 view: hr {
   view_label: "HR"
   derived_table: {
-    sql:
-      SELECT 'Joan of Arc' as "name", 'Executive' as department, 2008 as hired_year from app_bi.app_bi.a1
+  
+  sql: With a as (
+select  a11.charge_date  event_date,a13.service_tax_number VATID,a13.agency_ref Agency,
+  a11.order_id  id,
+  ((sum((CASE WHEN a11.fee_type_id in (2, 4) THEN a11.fixed_amount_amount ELSE 0 END)) + sum((CASE WHEN a11.fee_type_id = 3 THEN a11.fixed_amount_amount ELSE 0 END))) + (sum((CASE WHEN a11.fee_type_id in (2, 4) THEN a11.variable_amount_amount ELSE 0 END)) + sum((CASE WHEN a11.fee_type_id = 3 THEN a11.variable_amount_amount ELSE 0 END))))  merchant_fee_excl_tax,
+  (sum((CASE WHEN a11.fee_type_id in (2, 4) THEN a11.service_tax_amount_amount ELSE 0 END)) + sum((CASE WHEN a11.fee_type_id = 3 THEN a11.service_tax_amount_amount ELSE 0 END)))  WJXBFS1,
+     case when a11.order_payment_event_id =-1 then 'FEE REVERSAL' else 'CAPTURE' END FEETYPE
+
+from  "AP_RAW_GREEN"."GREEN"."F_MERCHANT_FEE" a11
+  join "AP_RAW_GREEN"."GREEN"."F_ORDER" a12
+    on  (a11.order_id = a12.id and
+  a11.par_region = a12.par_region)
+  join "AP_RAW_GREEN"."GREEN"."D_MERCHANT" a13
+    on  (a12.merchant_id = a13.id)
+--where (a13.country_code in ('CA')
+ --and a11.charge_date between '2023-01-01' and '2023-03-01')
+group by  a11.charge_date,
+  a11.order_id,FEETYPE,VATID,a13.agency_ref),
+   b as
+  (select a11.created_date  event_date,
+  a11.order_id  id,
+  sum(a11.amount)  WJXBFS1
+from  "AP_RAW_GREEN"."GREEN"."F_ORDER_PAYMENT_EVENT"  a11
+  join"AP_RAW_GREEN"."GREEN"."F_ORDER"  a12
+    on  (a11.order_id = a12.id and
+  a11.par_region = a12.par_region)
+  join  "AP_RAW_GREEN"."GREEN"."D_MERCHANT" a13
+    on  (a12.merchant_id = a13.id)
+where
+--(a13.country_code in ('CA')
+ --and a11.created_date between '2023-01-01' and '2023-03-01'and
+  a11.order_payment_event_type_id in (2)
+group by  a11.created_date,
+  a11.order_id),
+
+    c as
+    (select a13.merchant_id  merchant_id,
+  max(a13.trading_name)  trading_name,
+  coalesce(pa11.event_date, pa12.event_date)  event_date,
+  (CASE WHEN a13.is_online_flag = '1' THEN 'Online' ELSE 'Instore' END)  channel_type,
+  Case when a13.country_code=a13.merchant_country_code then 'Domestic' else 'XBT' end  CustCol_33,
+  a14.country_code  merchant_country,
+  coalesce(pa11.id, pa12.id)  id,
+  a14.agency_ref  agency_ref,
+  (max(pa11.merchant_fee_excl_tax))  merchant_fee_excl_tax,
+  (max(pa11.WJXBFS1))  tax_amount,
+     case when max(pa11.merchant_fee_excl_tax)<>0 then
+    (max(pa11.WJXBFS1)/max(pa11.merchant_fee_excl_tax))*100
+     else 0
+     end taxrate,
+  (max(pa12.WJXBFS1))  TotalAmount,
+     pa11.FEETYPE,
+     pa11.VATID,
+     pa11.Agency
+from  a pa11
+  full outer join b pa12
+    on  (pa11.event_date = pa12.event_date and
+  pa11.id = pa12.id)
+  join  "AP_RAW_GREEN"."GREEN"."F_ORDER"  a13
+    on  (coalesce(pa11.id, pa12.id) = a13.id)
+  join  "AP_RAW_GREEN"."GREEN"."D_MERCHANT" a14
+    on  (a13.merchant_id = a14.id)
+    -- where a13.merchant_id=
+group by  a13.merchant_id,
+  coalesce(pa11.event_date, pa12.event_date),
+  (CASE WHEN a13.is_online_flag = '1' THEN 'Online' ELSE 'Instore' END),
+  Case when a13.country_code=a13.merchant_country_code then 'Domestic' else 'XBT' end,
+  a14.country_code,
+  coalesce(pa11.id, pa12.id),
+  a14.agency_ref,pa11.FEETYPE,pa11.VATID,pa11.Agency)
+
+    select merchant_ID,Trading_name,Event_date,Channel_type,CUSTCOL_33,MERCHANT_COUNTRY,
+    sum(MERCHANT_FEE_EXCL_TAX) as MERCHANT_FEE_EXCL_TAX ,SUM(TAX_AMOUNT) as TAX_AMOUNT,round(TAXRATE) as TAXRATE,sum(totalamount) as totalamount,FEETYPE,VATID,Agency
+    from c
+    group by  merchant_ID,Trading_name,Event_date,Channel_type,CUSTCOL_33,MERCHANT_COUNTRY,round(TAXRATE),FEETYPE,VATID,Agency
+     ;;
+      
     ;;
   }
   }
